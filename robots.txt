@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /.well-known/
+Disallow: /vercel.json
+
+Sitemap: https://talentkart.co.in/sitemap.xml
+Host: talentkart.co.in
