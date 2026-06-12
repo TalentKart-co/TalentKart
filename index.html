@@ -1,35 +1,3 @@
-<!DOCTYPE html>
-<!--
-╔══════════════════════════════════════════════════════════════════╗
-║          TALENTKART — DEPLOYMENT SECURITY CHECKLIST             ║
-╠══════════════════════════════════════════════════════════════════╣
-║ Before going live, complete every item below:                   ║
-║                                                                  ║
-║  SERVER-SIDE (most important — meta tags alone are not enough)  ║
-║  ✅ 1. Serve over HTTPS only. Redirect all HTTP → HTTPS.        ║
-║  ✅ 2. Set HSTS header: Strict-Transport-Security: max-age=     ║
-║         31536000; includeSubDomains; preload                     ║
-║  ✅ 3. Move the Content-Security-Policy to an HTTP response      ║
-║         header (meta CSP is weaker; it can be bypassed by       ║
-║         injected content that appears before it).               ║
-║  ✅ 4. Set X-Frame-Options: DENY via server header               ║
-║  ✅ 5. Set X-Content-Type-Options: nosniff via server header     ║
-║  ✅ 6. Set Referrer-Policy: strict-origin-when-cross-origin      ║
-║  ✅ 7. Enable gzip/Brotli compression                            ║
-║  ✅ 8. Set Cache-Control: no-store on any page with user data    ║
-║                                                                  ║
-║  DOMAIN & DNS                                                    ║
-║  ✅ 9.  Add domain to HSTS preload list: hstspreload.org         ║
-║  ✅ 10. Set up CAA DNS record to restrict certificate issuers    ║
-║  ✅ 11. Enable DNSSEC on your domain registrar                   ║
-║                                                                  ║
-║  ONGOING                                                         ║
-║  ✅ 12. Monitor with https://securityheaders.com                 ║
-║  ✅ 13. Scan with https://observatory.mozilla.org                ║
-║  ✅ 14. Renew TLS certificate before expiry (automate with       ║
-║          Let's Encrypt / certbot)                                ║
-╚══════════════════════════════════════════════════════════════════╝
--->
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
