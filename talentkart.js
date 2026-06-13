@@ -442,8 +442,23 @@ Timestamp: ${new Date().toUTCString()}
     return;
   }
 
-  // 8. Open mail client
-  window.location.href = mailtoLink;
+  // 8. Open mail client — try multiple methods for cross-browser compatibility
+  try {
+    // Method 1: window.open (best for Vercel/production, doesn't trigger navigation CSP)
+    const mailWin = window.open(mailtoLink, '_self');
+    if(!mailWin || mailWin.closed){
+      // Method 2: fallback hidden anchor click
+      const a = document.createElement('a');
+      a.href = mailtoLink;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(()=> document.body.removeChild(a), 500);
+    }
+  } catch(err) {
+    // Method 3: last resort
+    window.location.href = mailtoLink;
+  }
 
   // 9. Confirm + reset
   showToast('📬 Your email app is opening — just hit Send!','#22d3ee');
