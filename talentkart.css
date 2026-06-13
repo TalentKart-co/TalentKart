@@ -304,3 +304,13 @@ input.valid,select.valid,textarea.valid{border-color:#22d3ee !important}
   .footer-grid{grid-template-columns:1fr;gap:28px}
   .hero-3d-cards{display:none}
 }
+
+
+/* ══ FACULTY GLYPHIC FONT — Applied to numbers and key headings ══ */
+.why-num,
+.value-card-num,
+.process-step-num,
+.hero-title,
+.hero-title .gradient-text {
+  font-family: 'Faculty Glyphic', serif;
+}

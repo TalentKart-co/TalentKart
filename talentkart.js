@@ -484,6 +484,21 @@ function showToast(message, color){
   setTimeout(()=>t.classList.remove('show'),4500);
 }
 
+// ── Wire submit button via JS (CSP-safe: no inline onclick needed) ──
+document.addEventListener('DOMContentLoaded', function() {
+  const submitBtn = document.getElementById('submitBtn');
+  if (submitBtn) {
+    submitBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      submitForm();
+    });
+  }
+  // Also wire mobile close links
+  document.querySelectorAll('[data-close-mobile]').forEach(function(el) {
+    el.addEventListener('click', closeMobile);
+  });
+});
+
 // ── Shake animation for validation fail ──
 const shakeStyle=document.createElement('style');
 shakeStyle.textContent=`@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}`;
