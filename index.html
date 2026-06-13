@@ -1,19 +1,10 @@
+<!DOCTYPE html>
+
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
   <!-- ══ SECURITY HEADERS ══ -->
   <!-- Content Security Policy: only allow resources from same origin + trusted CDNs -->
-  <!--
-    ╔══════════════════════════════════════════════════════════════════════╗
-    ║  DEPLOYMENT NOTE — Replace this meta CSP with a real HTTP header.  ║
-    ║  Meta CSP does NOT protect against injected <meta> tags and is      ║
-    ║  weaker than a server-sent Content-Security-Policy header.          ║
-    ║  For Apache add to .htaccess; for Nginx add to server block;        ║
-    ║  for Vercel/Netlify use their headers config files.                 ║
-    ║  When you move scripts to an external .js file, replace             ║
-    ║  'unsafe-inline' with a 'nonce-<base64>' or 'sha256-<hash>' value. ║
-    ╚══════════════════════════════════════════════════════════════════════╝
-  -->
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'none';
     script-src 'self' 'unsafe-inline';
@@ -24,7 +15,7 @@
     frame-src 'none';
     object-src 'none';
     base-uri 'self';
-    form-action 'none';
+    form-action 'self' mailto:;
     upgrade-insecure-requests;
     block-all-mixed-content;
   "/>
