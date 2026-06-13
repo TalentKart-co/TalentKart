@@ -5,6 +5,8 @@
 <meta charset="UTF-8"/>
   <!-- ══ SECURITY HEADERS ══ -->
   <!-- Content Security Policy: only allow resources from same origin + trusted CDNs -->
+
+  
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'none';
     script-src 'self' 'unsafe-inline';
@@ -25,8 +27,7 @@
   <meta http-equiv="Strict-Transport-Security" content="max-age=31536000; includeSubDomains"/>
   <!-- Disable referrer leakage -->
   <meta name="referrer" content="strict-origin-when-cross-origin"/>
-  <meta http-equiv="Cross-Origin-Opener-Policy" content="same-origin"/>
-  <meta http-equiv="Cross-Origin-Embedder-Policy" content="require-corp"/>
+  <meta http-equiv="Cross-Origin-Opener-Policy" content="same-origin-allow-popups"/>
   <!-- Disable browser features not needed -->
   <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=(), payment=(), usb=()"/>
   <!-- Prevent caching of sensitive pages -->
