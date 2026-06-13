@@ -463,12 +463,10 @@ Timestamp: ${new Date().toUTCString()}
   // 9. Confirm + reset
   showToast('📬 Your email app is opening — just hit Send!','#22d3ee');
   setTimeout(()=>{
-    ['f-fname','f-lname','f-email','f-phone','f-company','f-msg'].forEach(id=>{
+    ['f-fname','f-lname','f-email','f-phone','f-company','f-service','f-msg'].forEach(id=>{
       const el=document.getElementById(id);
       if(el){ el.value=''; el.classList.remove('valid','invalid'); }
     });
-    const sel=document.getElementById('f-service');
-    if(sel){ sel.value=''; sel.classList.remove('valid','invalid'); }
     document.querySelectorAll('.field-err').forEach(e=>e.textContent='');
   },1500);
 }
@@ -484,20 +482,26 @@ function showToast(message, color){
   setTimeout(()=>t.classList.remove('show'),4500);
 }
 
-// ── Wire submit button via JS (CSP-safe: no inline onclick needed) ──
-document.addEventListener('DOMContentLoaded', function() {
+// ── Wire submit button — works regardless of when script loads ──
+function wireEvents() {
   const submitBtn = document.getElementById('submitBtn');
-  if (submitBtn) {
+  if (submitBtn && !submitBtn._wired) {
+    submitBtn._wired = true;
     submitBtn.addEventListener('click', function(e) {
       e.preventDefault();
       submitForm();
     });
   }
-  // Also wire mobile close links
   document.querySelectorAll('[data-close-mobile]').forEach(function(el) {
     el.addEventListener('click', closeMobile);
   });
-});
+}
+// Fire immediately if DOM ready, otherwise wait
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', wireEvents);
+} else {
+  wireEvents(); // DOM already ready — fire now
+}
 
 // ── Shake animation for validation fail ──
 const shakeStyle=document.createElement('style');
