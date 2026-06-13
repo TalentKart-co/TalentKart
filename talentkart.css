@@ -179,7 +179,7 @@ section::before{content:'';position:absolute;top:0;left:8%;right:8%;height:1px;b
 .why-card::before{content:'';position:absolute;inset:0;border-radius:22px;background:linear-gradient(135deg,rgba(5,99,201,.18),rgba(34,211,238,.09));opacity:0;transition:opacity .4s}
 .why-card:hover{box-shadow:0 20px 60px rgba(5,99,201,.3);border-color:rgba(5,99,201,.5)}
 .why-card:hover::before{opacity:1}
-.why-num{font-family:'Syne',sans-serif;font-size:52px;font-weight:800;background:linear-gradient(135deg,#7ec8fd,#22d3ee);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:14px;line-height:1;transition:transform .4s cubic-bezier(.34,1.56,.64,1)}
+.why-num{font-family:'Faculty Glyphic',serif;font-size:52px;font-weight:800;background:linear-gradient(135deg,#7ec8fd,#22d3ee);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:14px;line-height:1;transition:transform .4s cubic-bezier(.34,1.56,.64,1)}
 .why-card:hover .why-num{transform:scale(1.12) translateY(-4px)}
 .why-card h3{font-size:17px;font-weight:700;margin-bottom:10px;color:#fff}
 .why-card p{font-size:14px;color:rgba(255,255,255,.65)}
@@ -227,7 +227,7 @@ section::before{content:'';position:absolute;top:0;left:8%;right:8%;height:1px;b
 .process-steps::before{content:'';position:absolute;top:56px;left:10%;right:10%;height:1px;background:linear-gradient(90deg,transparent,#0563c9,#22d3ee,#0563c9,transparent);opacity:.45}
 .process-step{text-align:center;padding:28px 20px;transition:transform .3s}
 .process-step:hover{transform:translateY(-6px)}
-.process-step-num{width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#0563c9,#0891b2);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:#fff;transition:all .4s cubic-bezier(.34,1.56,.64,1);position:relative;z-index:1}
+.process-step-num{width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#0563c9,#0891b2);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;font-family:'Faculty Glyphic',serif;font-size:20px;font-weight:800;color:#fff;transition:all .4s cubic-bezier(.34,1.56,.64,1);position:relative;z-index:1}
 .process-step:hover .process-step-num{transform:scale(1.18) translateY(-4px);box-shadow:0 0 40px rgba(5,99,201,.75)}
 .process-step h3{font-size:14px;font-weight:700;margin-bottom:8px;color:#fff;transition:color .3s}
 .process-step:hover h3{color:#22d3ee}
@@ -306,11 +306,32 @@ input.valid,select.valid,textarea.valid{border-color:#22d3ee !important}
 }
 
 
-/* ══ FACULTY GLYPHIC FONT — Applied to numbers and key headings ══ */
-.why-num,
-.value-card-num,
-.process-step-num,
+/* ══ FACULTY GLYPHIC FONT ══ */
+
+/* Hero title — "Next-Gen Hiring Platform" */
 .hero-title,
-.hero-title .gradient-text {
-  font-family: 'Faculty Glyphic', serif;
+.hero-title .gradient-text,
+.display.hero-title {
+  font-family: 'Faculty Glyphic', serif !important;
+}
+
+/* About heading — "Simplifying Recruitment. Empowering Careers." */
+.about-grid .heading,
+.heading.faculty {
+  font-family: 'Faculty Glyphic', serif !important;
+}
+
+/* Why-card numbers — 01 02 03 04 */
+.why-num {
+  font-family: 'Faculty Glyphic', serif !important;
+}
+
+/* Value-card labels — Value 01 through Value 08 */
+.value-card-num {
+  font-family: 'Faculty Glyphic', serif !important;
+}
+
+/* Process step numbers — 1 2 3 4 5 */
+.process-step-num {
+  font-family: 'Faculty Glyphic', serif !important;
 }
