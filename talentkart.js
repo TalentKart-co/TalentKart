@@ -10,179 +10,278 @@
 
 // ════════════════════════════════════════════════
 // ANIMATED CANVAS "VIDEO" BACKGROUND
+// Interactive 3D talent-constellation:
+//  · depth-sorted parallax node field (3 layers, true z)
+//  · mouse-reactive camera drift (parallax-on-cursor)
+//  · rotating wireframe globe (talent network metaphor)
+//  · click/tap ripple bursts
+//  · soft depth-of-field via per-layer blur & scale
 // ════════════════════════════════════════════════
 (function(){
   const canvas = document.getElementById('heroCanvas');
   const ctx = canvas.getContext('2d');
-  let W, H, animId;
+  let W, H, DPR, animId;
+  const prefersReducedMotionLocal = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   function resize(){
-    W = canvas.width = canvas.offsetWidth;
-    H = canvas.height = canvas.offsetHeight;
+    DPR = Math.min(window.devicePixelRatio||1, 2);
+    W = canvas.width = canvas.offsetWidth*DPR;
+    H = canvas.height = canvas.offsetHeight*DPR;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
   }
   resize();
   window.addEventListener('resize', resize);
 
-  // ── NODE NETWORK (talent connection metaphor) ──
-  const NODE_COUNT = 55;
-  const CONN_DIST = 160;
-  const nodes = [];
+  const cw = ()=>canvas.offsetWidth, ch = ()=>canvas.offsetHeight;
 
-  for(let i=0;i<NODE_COUNT;i++){
-    nodes.push({
-      x: Math.random()*1600,
-      y: Math.random()*900,
-      vx:(Math.random()-.5)*.4,
-      vy:(Math.random()-.5)*.4,
-      r: Math.random()*2.5+1,
-      pulse: Math.random()*Math.PI*2,
-      pulseSpeed: Math.random()*.02+.008,
-      type: Math.floor(Math.random()*3) // 0=blue,1=cyan,2=white
+  // ── MOUSE / TOUCH — smoothed camera target for parallax ──
+  let mouseX=0.5, mouseY=0.5, camX=0.5, camY=0.5;
+  let hasPointer=false;
+  canvas.addEventListener('mousemove',e=>{
+    const r=canvas.getBoundingClientRect();
+    mouseX=(e.clientX-r.left)/r.width;
+    mouseY=(e.clientY-r.top)/r.height;
+    hasPointer=true;
+  });
+  canvas.addEventListener('mouseleave',()=>{mouseX=0.5;mouseY=0.5});
+  window.addEventListener('touchmove',e=>{
+    if(!e.touches[0])return;
+    const r=canvas.getBoundingClientRect();
+    mouseX=(e.touches[0].clientX-r.left)/r.width;
+    mouseY=(e.touches[0].clientY-r.top)/r.height;
+    hasPointer=true;
+  },{passive:true});
+
+  // ── CLICK / TAP — spawn a burst ──
+  const bursts=[];
+  function spawnBurst(x,y){
+    const n=14;
+    for(let i=0;i<n;i++){
+      const a=(Math.PI*2/n)*i + Math.random()*0.3;
+      bursts.push({
+        x,y,
+        vx:Math.cos(a)*(1.4+Math.random()*1.6),
+        vy:Math.sin(a)*(1.4+Math.random()*1.6),
+        life:1, r:1.5+Math.random()*1.8,
+        color: Math.random()<0.5?'109,95,199':'8,145,178'
+      });
+    }
+  }
+  canvas.addEventListener('click',e=>{
+    const r=canvas.getBoundingClientRect();
+    spawnBurst(e.clientX-r.left, e.clientY-r.top);
+  });
+
+  // ── DEPTH-LAYERED NODE FIELD ──
+  // Three depth layers (far/mid/near) each with own parallax strength,
+  // size, speed and blur — creates genuine sense of 3D space.
+  const LAYERS=[
+    {count:26, speed:0.10, rMin:1.0, rMax:1.8, parallax:10,  blur:1.4, alphaMax:0.35},
+    {count:20, speed:0.18, rMin:1.6, rMax:2.6, parallax:22,  blur:0.4, alphaMax:0.55},
+    {count:14, speed:0.30, rMin:2.4, rMax:4.0, parallax:42,  blur:0,   alphaMax:0.85},
+  ];
+  const palette=['109,95,199','8,145,178','52,211,153'];
+  let nodes=[];
+  function seedNodes(){
+    nodes=[];
+    LAYERS.forEach((layer,li)=>{
+      // Grid-jittered placement: divide the canvas into a roughly-square grid
+      // sized to the node count, then drop one node per cell with a small
+      // random offset. This guarantees even coverage — no accidental dense
+      // clusters that read as a "globe" — while still looking organic.
+      const cols=Math.ceil(Math.sqrt(layer.count*1.4));
+      const rows=Math.ceil(layer.count/cols);
+      const cellW=1/cols, cellH=1/rows;
+      const cells=[];
+      for(let r=0;r<rows;r++) for(let c=0;c<cols;c++) cells.push([c,r]);
+      // shuffle so layer ordering doesn't bias which cells get used first
+      for(let i=cells.length-1;i>0;i--){
+        const j=Math.floor(Math.random()*(i+1));
+        [cells[i],cells[j]]=[cells[j],cells[i]];
+      }
+      for(let i=0;i<layer.count;i++){
+        const [c,r]=cells[i];
+        const jitter=0.62; // keep node within a shrunk-in portion of its cell
+        const x=(c+0.5+(Math.random()-.5)*jitter)*cellW;
+        const y=(r+0.5+(Math.random()-.5)*jitter)*cellH;
+        nodes.push({
+          x:Math.min(0.99,Math.max(0.01,x)),
+          y:Math.min(0.99,Math.max(0.01,y)),
+          vx:(Math.random()-.5)*0.0003*(li+1),
+          vy:(Math.random()-.5)*0.0003*(li+1),
+          r:layer.rMin+Math.random()*(layer.rMax-layer.rMin),
+          layer:li,
+          pulse:Math.random()*Math.PI*2,
+          pulseSpeed:Math.random()*.02+.008,
+          color:palette[Math.floor(Math.random()*palette.length)]
+        });
+      }
     });
   }
+  seedNodes();
 
-  // ── WAVE RINGS (ripple effect) ──
-  const rings = [];
+  // Connection distance scales with viewport so density feels right at any size
+  function connDist(){ return Math.min(cw(),ch())*0.13; }
+
+  // ── RINGS (ambient ripples, slower/sparser than before) ──
+  const rings=[];
   function spawnRing(){
     rings.push({
-      x: Math.random()*1600,
-      y: Math.random()*900,
-      r: 0,
-      maxR: 80+Math.random()*120,
-      alpha: 0.35,
-      speed: 0.6+Math.random()*0.4
+      x:Math.random(), y:Math.random()*0.7+0.1,
+      r:0, maxR:90+Math.random()*130,
+      alpha:0.3, speed:0.55+Math.random()*0.35
     });
   }
-  setInterval(spawnRing, 1800);
+  if(!prefersReducedMotionLocal) setInterval(spawnRing, 2200);
 
-  // ── SHOOTING LINES (data flow metaphor) ──
-  const shots = [];
+  // ── SHOOTING LINES (data-flow) ──
+  const shots=[];
   function spawnShot(){
-    const angle = Math.random()*Math.PI*2;
+    const angle=Math.random()*Math.PI*2;
     shots.push({
-      x: Math.random()*1600,
-      y: Math.random()*900,
-      angle,
-      speed: 2+Math.random()*3,
-      len: 60+Math.random()*100,
-      alpha: 0.6,
-      life: 1
+      x:Math.random(), y:Math.random(),
+      angle, speed:0.0022+Math.random()*0.0028,
+      len:70+Math.random()*110, alpha:0.55, life:1
     });
   }
-  setInterval(spawnShot, 600);
+  if(!prefersReducedMotionLocal) setInterval(spawnShot, 700);
 
   let t=0;
   function draw(){
-    ctx.clearRect(0,0,W,H);
+    const w=cw(), h=ch();
+    ctx.clearRect(0,0,w,h);
 
-    // Scale coords to canvas
-    const sx = W/1600, sy = H/900;
+    // Smooth camera drift toward pointer (lerp — no snapping)
+    camX += (mouseX-camX)*0.04;
+    camY += (mouseY-camY)*0.04;
+    const px=(camX-0.5), py=(camY-0.5); // -0.5..0.5 parallax offset
 
-    // ── Background deep gradient ──
-    const bg = ctx.createLinearGradient(0,0,W,H);
-    bg.addColorStop(0,'#050e1c');
-    bg.addColorStop(0.5,'#071428');
-    bg.addColorStop(1,'#030b18');
-    ctx.fillStyle = bg;
-    ctx.fillRect(0,0,W,H);
+    // ── Background gradient — Quantum Leap light palette (semi-transparent
+    // so the hero's underlying artwork layer shows through) ──
+    const bg=ctx.createLinearGradient(0,0,w,h);
+    bg.addColorStop(0,'rgba(255,255,255,0.55)');
+    bg.addColorStop(0.5,'rgba(241,240,252,0.55)');
+    bg.addColorStop(1,'rgba(224,242,238,0.55)');
+    ctx.fillStyle=bg;
+    ctx.fillRect(0,0,w,h);
 
-    // ── Large radial glow spots ──
-    function drawGlow(x,y,r,color){
-      const g = ctx.createRadialGradient(x*sx,y*sy,0,x*sx,y*sy,r*Math.min(sx,sy));
-      g.addColorStop(0,color);
-      g.addColorStop(1,'transparent');
-      ctx.fillStyle=g;
-      ctx.fillRect(0,0,W,H);
+    // ── Ambient glow spots — drift slightly with camera for depth ──
+    function drawGlow(nx,ny,r,color){
+      const x=nx*w+px*30, y=ny*h+py*30;
+      const g=ctx.createRadialGradient(x,y,0,x,y,r);
+      g.addColorStop(0,color); g.addColorStop(1,'transparent');
+      ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
     }
-    const pulse1 = Math.sin(t*.008)*0.06;
-    const pulse2 = Math.sin(t*.006+1)*0.05;
-    drawGlow(400,300,320,`rgba(5,99,201,${0.18+pulse1})`);
-    drawGlow(1200,250,280,`rgba(6,196,212,${0.12+pulse2})`);
-    drawGlow(800,700,250,`rgba(34,211,238,${0.08+pulse1})`);
+    const pulse1=Math.sin(t*.008)*0.05, pulse2=Math.sin(t*.006+1)*0.04;
+    drawGlow(0.25,0.33,Math.min(w,h)*0.38,`rgba(139,127,214,${0.14+pulse1})`);
+    drawGlow(0.75,0.28,Math.min(w,h)*0.34,`rgba(52,211,153,${0.10+pulse2})`);
+    drawGlow(0.5,0.78,Math.min(w,h)*0.30,`rgba(34,211,238,${0.08+pulse1})`);
 
     // ── Rings ──
     for(let i=rings.length-1;i>=0;i--){
-      const rng=rings[i];
-      rng.r+=rng.speed;
-      rng.alpha=0.35*(1-rng.r/rng.maxR);
-      if(rng.r>rng.maxR){rings.splice(i,1);continue}
+      const rg=rings[i];
+      rg.r+=rg.speed;
+      rg.alpha=0.3*(1-rg.r/rg.maxR);
+      if(rg.r>rg.maxR){rings.splice(i,1);continue}
       ctx.beginPath();
-      ctx.arc(rng.x*sx,rng.y*sy,rng.r*Math.min(sx,sy),0,Math.PI*2);
-      ctx.strokeStyle=`rgba(34,211,238,${rng.alpha})`;
+      ctx.arc(rg.x*w+px*20, rg.y*h+py*20, rg.r, 0, Math.PI*2);
+      ctx.strokeStyle=`rgba(109,95,199,${rg.alpha})`;
       ctx.lineWidth=1;
       ctx.stroke();
     }
 
-    // ── Connections ──
-    for(let i=0;i<nodes.length;i++){
-      for(let j=i+1;j<nodes.length;j++){
-        const dx=nodes[i].x-nodes[j].x, dy=nodes[i].y-nodes[j].y;
-        const dist=Math.sqrt(dx*dx+dy*dy);
-        if(dist<CONN_DIST){
-          const alpha=(1-dist/CONN_DIST)*0.25;
-          ctx.beginPath();
-          ctx.moveTo(nodes[i].x*sx,nodes[i].y*sy);
-          ctx.lineTo(nodes[j].x*sx,nodes[j].y*sy);
-          const colors=['rgba(13,127,232,','rgba(6,196,212,','rgba(34,211,238,'];
-          ctx.strokeStyle=colors[nodes[i].type]+alpha+')';
-          ctx.lineWidth=0.7;
-          ctx.stroke();
+    // ── Depth-layer node field: update + connections + draw ──
+    const cd=connDist();
+    LAYERS.forEach((layer,li)=>{
+      const layerNodes=nodes.filter(n=>n.layer===li);
+      const ox=px*layer.parallax, oy=py*layer.parallax;
+
+      // connections (within-layer only, keeps it visually clean)
+      for(let i=0;i<layerNodes.length;i++){
+        for(let j=i+1;j<layerNodes.length;j++){
+          const a=layerNodes[i], b=layerNodes[j];
+          const dx=(a.x-b.x)*w, dy=(a.y-b.y)*h;
+          const dist=Math.sqrt(dx*dx+dy*dy);
+          if(dist<cd){
+            const alpha=(1-dist/cd)*0.22*(li+1)/3;
+            ctx.beginPath();
+            ctx.moveTo(a.x*w+ox, a.y*h+oy);
+            ctx.lineTo(b.x*w+ox, b.y*h+oy);
+            ctx.strokeStyle=`rgba(${a.color},${alpha})`;
+            ctx.lineWidth=0.6+li*0.15;
+            ctx.stroke();
+          }
         }
       }
-    }
 
-    // ── Nodes ──
-    for(const n of nodes){
-      n.x+=n.vx; n.y+=n.vy;
-      if(n.x<0||n.x>1600)n.vx*=-1;
-      if(n.y<0||n.y>900)n.vy*=-1;
-      n.pulse+=n.pulseSpeed;
-      const glow=Math.sin(n.pulse)*0.3+0.7;
-      const colors=['rgba(13,127,232,','rgba(6,196,212,','rgba(255,255,255,'];
-      ctx.beginPath();
-      ctx.arc(n.x*sx,n.y*sy,n.r*(0.8+glow*.4),0,Math.PI*2);
-      ctx.fillStyle=colors[n.type]+(0.6*glow)+')';
-      ctx.fill();
-      // Glow ring on larger nodes
-      if(n.r>2.5){
+      // nodes
+      if(layer.blur>0){ ctx.filter=`blur(${layer.blur}px)`; }
+      layerNodes.forEach(n=>{
+        n.x+=n.vx; n.y+=n.vy;
+        if(n.x<0||n.x>1)n.vx*=-1;
+        if(n.y<0||n.y>1)n.vy*=-1;
+        n.pulse+=n.pulseSpeed;
+        const glow=Math.sin(n.pulse)*0.3+0.7;
+        const drawX=n.x*w+ox, drawY=n.y*h+oy;
         ctx.beginPath();
-        ctx.arc(n.x*sx,n.y*sy,n.r*2.5,0,Math.PI*2);
-        ctx.fillStyle=colors[n.type]+(0.08*glow)+')';
+        ctx.arc(drawX,drawY,n.r*(0.8+glow*.4),0,Math.PI*2);
+        ctx.fillStyle=`rgba(${n.color},${layer.alphaMax*glow})`;
         ctx.fill();
-      }
-    }
+        if(n.r>2.2){
+          ctx.beginPath();
+          ctx.arc(drawX,drawY,n.r*2.4,0,Math.PI*2);
+          ctx.fillStyle=`rgba(${n.color},${0.08*glow})`;
+          ctx.fill();
+        }
+      });
+      if(layer.blur>0){ ctx.filter='none'; }
+    });
 
     // ── Shooting lines ──
     for(let i=shots.length-1;i>=0;i--){
       const s=shots[i];
-      s.life-=0.018;
+      s.life-=0.016;
       s.x+=Math.cos(s.angle)*s.speed;
       s.y+=Math.sin(s.angle)*s.speed;
       if(s.life<=0){shots.splice(i,1);continue}
-      const tx=s.x-Math.cos(s.angle)*s.len;
-      const ty=s.y-Math.sin(s.angle)*s.len;
-      const grad=ctx.createLinearGradient(tx*sx,ty*sy,s.x*sx,s.y*sy);
+      const tx=s.x-Math.cos(s.angle)*(s.len/w);
+      const ty=s.y-Math.sin(s.angle)*(s.len/h);
+      const grad=ctx.createLinearGradient(tx*w,ty*h,s.x*w,s.y*h);
       grad.addColorStop(0,'transparent');
-      grad.addColorStop(1,`rgba(34,211,238,${s.alpha*s.life})`);
+      grad.addColorStop(1,`rgba(109,95,199,${s.alpha*s.life})`);
       ctx.beginPath();
-      ctx.moveTo(tx*sx,ty*sy);
-      ctx.lineTo(s.x*sx,s.y*sy);
+      ctx.moveTo(tx*w,ty*h);
+      ctx.lineTo(s.x*w,s.y*h);
       ctx.strokeStyle=grad;
       ctx.lineWidth=1.2;
       ctx.stroke();
     }
 
+    // ── Click-burst particles ──
+    for(let i=bursts.length-1;i>=0;i--){
+      const b=bursts[i];
+      b.life-=0.022;
+      b.x+=b.vx; b.y+=b.vy; b.vx*=0.97; b.vy*=0.97;
+      if(b.life<=0){bursts.splice(i,1);continue}
+      ctx.beginPath();
+      ctx.arc(b.x,b.y,b.r*b.life,0,Math.PI*2);
+      ctx.fillStyle=`rgba(${b.color},${b.life*0.8})`;
+      ctx.fill();
+    }
+
     // ── Horizontal scan line sweep ──
-    const scanY = ((t*0.4) % (H+60)) - 30;
-    const scanGrad = ctx.createLinearGradient(0,scanY-20,0,scanY+20);
+    const scanY=((t*0.4)%(h+60))-30;
+    const scanGrad=ctx.createLinearGradient(0,scanY-20,0,scanY+20);
     scanGrad.addColorStop(0,'transparent');
-    scanGrad.addColorStop(0.5,'rgba(34,211,238,0.04)');
+    scanGrad.addColorStop(0.5,'rgba(109,95,199,0.05)');
     scanGrad.addColorStop(1,'transparent');
     ctx.fillStyle=scanGrad;
-    ctx.fillRect(0,scanY-20,W,40);
+    ctx.fillRect(0,scanY-20,w,40);
 
     t++;
-    animId=requestAnimationFrame(draw);
+    if(!prefersReducedMotionLocal){
+      animId=requestAnimationFrame(draw);
+    }
   }
   draw();
 })();
@@ -192,6 +291,12 @@
 // ════════════════════════════════════════════════
 let lastY=window.scrollY, scrollDir='down';
 window.addEventListener('scroll',()=>{scrollDir=window.scrollY>lastY?'down':'up';lastY=window.scrollY},{passive:true});
+
+// ════════════════════════════════════════════════
+// MOTION PREFERENCE — declared early; used by tilt,
+// magnetic buttons, and parallax below
+// ════════════════════════════════════════════════
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ════════════════════════════════════════════════
 // NAVBAR
@@ -205,9 +310,43 @@ hamburger.addEventListener('click',()=>mobileMenu.classList.toggle('open'));
 function closeMobile(){mobileMenu.classList.remove('open')}
 
 // ════════════════════════════════════════════════
-// SCROLL REVEAL — direction aware
+// SCROLL-LINKED PARALLAX — adds depth as the page scrolls
+// ════════════════════════════════════════════════
+if(!prefersReducedMotion){
+const parallaxEls=[...document.querySelectorAll('.h3card')].map((el,i)=>({
+  el, speed:0.04+(i%3)*0.025, offset:0
+}));
+let parallaxRaf=null;
+function updateParallax(){
+  const sy=window.scrollY;
+  parallaxEls.forEach(p=>{
+    const ty=sy*p.speed*-1;
+    p.el.style.setProperty('--parallaxY',`${ty}px`);
+  });
+  parallaxRaf=null;
+}
+window.addEventListener('scroll',()=>{
+  if(!parallaxRaf) parallaxRaf=requestAnimationFrame(updateParallax);
+},{passive:true});
+}
+
+// ════════════════════════════════════════════════
+// SCROLL REVEAL — direction aware + staggered inner content
 // ════════════════════════════════════════════════
 const revEls=document.querySelectorAll('.sd-up,.sd-down,.sd-left,.sd-right,.sd-scale');
+
+// Pre-tag staggerable children once (headings, paragraphs, list items, icons)
+// so their entrance can cascade smoothly after the parent card settles.
+revEls.forEach(el=>{
+  const kids=el.querySelectorAll(':scope > *, :scope .service-icon, :scope h3, :scope p, :scope li, :scope .why-num, :scope .value-card-num, :scope .vm-icon');
+  kids.forEach((k,i)=>{
+    if(!k.classList.contains('stagger-child')){
+      k.classList.add('stagger-child');
+      k.style.transitionDelay=`${Math.min(i*18,90)}ms`;
+    }
+  });
+});
+
 const revObs=new IntersectionObserver(entries=>{
   entries.forEach(e=>{
     if(e.isIntersecting){
@@ -219,7 +358,7 @@ const revObs=new IntersectionObserver(entries=>{
       else if(scrollDir==='down'&&el.classList.contains('sd-down')){el.classList.replace('sd-down','sd-up')}
     }
   });
-},{threshold:0.1,rootMargin:'0px 0px -60px 0px'});
+},{threshold:0.05,rootMargin:'0px 0px -60px 0px'});
 revEls.forEach(el=>revObs.observe(el));
 
 // ════════════════════════════════════════════════
@@ -234,43 +373,94 @@ document.querySelectorAll('.goal-item').forEach(item=>{
 });
 
 // ════════════════════════════════════════════════
-// 3D TILT (mouse only — NOT on hero content)
+// 3D TILT — smooth lerped (eased) via requestAnimationFrame
+// Mouse position is the TARGET; actual transform glides toward
+// it every frame instead of snapping, for a fluid 3D feel.
 // ════════════════════════════════════════════════
 function addTilt(sel,max=10,persp=900){
+  if(prefersReducedMotion) return;
   document.querySelectorAll(sel).forEach(c=>{
+    let targetRX=0, targetRY=0, targetMX=50, targetMY=50;
+    let curRX=0,    curRY=0,    curMX=50,    curMY=50;
+    let curScale=1, targetScale=1;
+    let raf=null, active=false;
+
+    function loop(){
+      // Ease 16% of the remaining distance per frame — buttery, no snapping
+      curRX += (targetRX-curRX)*0.14;
+      curRY += (targetRY-curRY)*0.14;
+      curMX += (targetMX-curMX)*0.14;
+      curMY += (targetMY-curMY)*0.14;
+      curScale += (targetScale-curScale)*0.14;
+
+      c.style.transform=`perspective(${persp}px) rotateX(${curRX}deg) rotateY(${curRY}deg) scale(${curScale}) translateZ(8px)`;
+      c.style.setProperty('--mx',curMX+'%');
+      c.style.setProperty('--my',curMY+'%');
+
+      const settled = Math.abs(targetRX-curRX)<0.01 && Math.abs(targetRY-curRY)<0.01 && Math.abs(targetScale-curScale)<0.001;
+      if(active || !settled){
+        raf=requestAnimationFrame(loop);
+      } else {
+        raf=null;
+      }
+    }
+    function ensureLoop(){ if(!raf) raf=requestAnimationFrame(loop); }
+
     c.addEventListener('mousemove',e=>{
+      active=true;
       const r=c.getBoundingClientRect();
       const x=e.clientX-r.left,y=e.clientY-r.top;
       const cx=r.width/2,cy=r.height/2;
-      c.style.transform=`perspective(${persp}px) rotateX(${-((y-cy)/cy)*max}deg) rotateY(${((x-cx)/cx)*max}deg) translateZ(8px)`;
-      c.style.setProperty('--mx',(x/r.width*100)+'%');
-      c.style.setProperty('--my',(y/r.height*100)+'%');
+      targetRX=-((y-cy)/cy)*max;
+      targetRY=((x-cx)/cx)*max;
+      targetMX=(x/r.width*100);
+      targetMY=(y/r.height*100);
+      targetScale=1.015;
+      ensureLoop();
     });
-    c.addEventListener('mouseleave',()=>{c.style.transform=''});
+    c.addEventListener('mouseleave',()=>{
+      active=false;
+      targetRX=0;targetRY=0;targetMX=50;targetMY=50;targetScale=1;
+      ensureLoop();
+    });
   });
 }
 addTilt('.tilt-card',9,900);
 addTilt('.service-card',7,1000);
 addTilt('.why-card',9,900);
 addTilt('.value-card',7,900);
+addTilt('.industry-chip',6,800);
+addTilt('.goal-content',5,900);
 
 // ════════════════════════════════════════════════
-// MAGNETIC BUTTONS
+// MAGNETIC BUTTONS — smooth lerped pull toward cursor
 // ════════════════════════════════════════════════
+if(!prefersReducedMotion){
 document.querySelectorAll('.btn-primary,.btn-ghost').forEach(btn=>{
+  let tx=0,ty=0,cx=0,cy=0,raf=null,active=false;
+  function loop(){
+    cx+=(tx-cx)*0.18; cy+=(ty-cy)*0.18;
+    btn.style.transform=`translate(${cx}px,${cy}px)`;
+    const settled=Math.abs(tx-cx)<0.05&&Math.abs(ty-cy)<0.05;
+    if(active||!settled){raf=requestAnimationFrame(loop)} else {raf=null}
+  }
+  function ensure(){if(!raf)raf=requestAnimationFrame(loop)}
   btn.addEventListener('mousemove',e=>{
+    active=true;
     const r=btn.getBoundingClientRect();
-    const x=e.clientX-r.left-r.width/2,y=e.clientY-r.top-r.height/2;
-    btn.style.transform=`translate(${x*.16}px,${y*.16}px)`;
+    tx=(e.clientX-r.left-r.width/2)*.16;
+    ty=(e.clientY-r.top-r.height/2)*.16;
+    ensure();
   });
-  btn.addEventListener('mouseleave',()=>btn.style.transform='');
+  btn.addEventListener('mouseleave',()=>{active=false;tx=0;ty=0;ensure()});
 });
+}
 
 // ════════════════════════════════════════════════
 // PARTICLES
 // ════════════════════════════════════════════════
 const pc=document.getElementById('particles');
-['rgba(5,99,201,','rgba(6,196,212,','rgba(34,211,238,'].forEach((col,ci)=>{
+['rgba(109,95,199,','rgba(8,145,178,','rgba(52,211,153,'].forEach((col,ci)=>{
   for(let i=0;i<9;i++){
     const p=document.createElement('div');
     const s=Math.random()*3+2;
@@ -289,7 +479,7 @@ const navLinks=document.querySelectorAll('.nav-links a');
 window.addEventListener('scroll',()=>{
   let cur='';
   sections.forEach(s=>{if(window.scrollY>=s.offsetTop-140)cur=s.id});
-  navLinks.forEach(a=>{a.style.color=a.getAttribute('href')==='#'+cur?'#fff':''});
+  navLinks.forEach(a=>{a.style.color=a.getAttribute('href')==='#'+cur?'#181a3d':''});
 },{passive:true});
 
 // ════════════════════════════════════════════════
@@ -477,7 +667,7 @@ function showToast(message, color){
   t.textContent=message;
   t.style.background= color==='#f97316'
     ? 'rgba(249,115,22,.95)'
-    : 'rgba(5,99,201,.95)';
+    : 'linear-gradient(135deg, rgba(109,95,199,.95), rgba(8,145,178,.95))';
   t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),4500);
 }
