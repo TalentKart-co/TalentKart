@@ -76,9 +76,9 @@
   // Three depth layers (far/mid/near) each with own parallax strength,
   // size, speed and blur — creates genuine sense of 3D space.
   const LAYERS=[
-    {count:26, speed:0.10, rMin:1.0, rMax:1.8, parallax:10,  blur:1.4, alphaMax:0.35},
-    {count:20, speed:0.18, rMin:1.6, rMax:2.6, parallax:22,  blur:0.4, alphaMax:0.55},
-    {count:14, speed:0.30, rMin:2.4, rMax:4.0, parallax:42,  blur:0,   alphaMax:0.85},
+    {count:18, speed:0.10, rMin:1.0, rMax:1.6, parallax:10,  alphaMax:0.28},
+    {count:14, speed:0.18, rMin:1.6, rMax:2.4, parallax:22,  alphaMax:0.48},
+    {count:10, speed:0.28, rMin:2.2, rMax:3.6, parallax:38,  alphaMax:0.72},
   ];
   const palette=['109,95,199','8,145,178','52,211,153'];
   let nodes=[];
@@ -132,7 +132,7 @@
       alpha:0.3, speed:0.55+Math.random()*0.35
     });
   }
-  if(!prefersReducedMotionLocal) setInterval(spawnRing, 2200);
+  if(!prefersReducedMotionLocal) setInterval(spawnRing, 3500);
 
   // ── SHOOTING LINES (data-flow) ──
   const shots=[];
@@ -144,7 +144,7 @@
       len:70+Math.random()*110, alpha:0.55, life:1
     });
   }
-  if(!prefersReducedMotionLocal) setInterval(spawnShot, 700);
+  if(!prefersReducedMotionLocal) setInterval(spawnShot, 1400);
 
   let t=0;
   function draw(){
@@ -215,7 +215,6 @@
       }
 
       // nodes
-      if(layer.blur>0){ ctx.filter=`blur(${layer.blur}px)`; }
       layerNodes.forEach(n=>{
         n.x+=n.vx; n.y+=n.vy;
         if(n.x<0||n.x>1)n.vx*=-1;
@@ -234,7 +233,6 @@
           ctx.fill();
         }
       });
-      if(layer.blur>0){ ctx.filter='none'; }
     });
 
     // ── Shooting lines ──
@@ -279,10 +277,25 @@
     ctx.fillRect(0,scanY-20,w,40);
 
     t++;
-    if(!prefersReducedMotionLocal){
+    if(!prefersReducedMotionLocal && heroVisible){
       animId=requestAnimationFrame(draw);
+    } else {
+      animId=null;
     }
   }
+
+  // ── Pause canvas when hero is off-screen to save CPU/GPU ──
+  let heroVisible=true;
+  new IntersectionObserver(([e])=>{
+    heroVisible=e.isIntersecting;
+    if(heroVisible && !animId && !prefersReducedMotionLocal){
+      animId=requestAnimationFrame(draw);
+    } else if(!heroVisible && animId){
+      cancelAnimationFrame(animId);
+      animId=null;
+    }
+  },{threshold:0.01}).observe(canvas);
+
   draw();
 })();
 
@@ -373,64 +386,79 @@ document.querySelectorAll('.goal-item').forEach(item=>{
 });
 
 // ════════════════════════════════════════════════
-// 3D TILT — smooth lerped (eased) via requestAnimationFrame
-// Mouse position is the TARGET; actual transform glides toward
-// it every frame instead of snapping, for a fluid 3D feel.
+// 3D TILT — ONE shared rAF loop for ALL card types
+// Previously each card ran its own requestAnimationFrame,
+// meaning 7+ loops could run simultaneously. Now a single
+// loop processes every hovered card in one pass per frame.
 // ════════════════════════════════════════════════
-function addTilt(sel,max=10,persp=900){
-  if(prefersReducedMotion) return;
-  document.querySelectorAll(sel).forEach(c=>{
-    let targetRX=0, targetRY=0, targetMX=50, targetMY=50;
-    let curRX=0,    curRY=0,    curMX=50,    curMY=50;
-    let curScale=1, targetScale=1;
-    let raf=null, active=false;
+if(!prefersReducedMotion){
+  const tiltCards=[];
+  let tiltRaf=null;
 
-    function loop(){
-      // Ease 16% of the remaining distance per frame — buttery, no snapping
-      curRX += (targetRX-curRX)*0.14;
-      curRY += (targetRY-curRY)*0.14;
-      curMX += (targetMX-curMX)*0.14;
-      curMY += (targetMY-curMY)*0.14;
-      curScale += (targetScale-curScale)*0.14;
-
-      c.style.transform=`perspective(${persp}px) rotateX(${curRX}deg) rotateY(${curRY}deg) scale(${curScale}) translateZ(8px)`;
-      c.style.setProperty('--mx',curMX+'%');
-      c.style.setProperty('--my',curMY+'%');
-
-      const settled = Math.abs(targetRX-curRX)<0.01 && Math.abs(targetRY-curRY)<0.01 && Math.abs(targetScale-curScale)<0.001;
-      if(active || !settled){
-        raf=requestAnimationFrame(loop);
-      } else {
-        raf=null;
+  function tiltLoop(){
+    let anyActive=false;
+    for(const c of tiltCards){
+      const settled=
+        Math.abs(c.tRX-c.rX)<0.01 &&
+        Math.abs(c.tRY-c.rY)<0.01 &&
+        Math.abs(c.tSc-c.sc)<0.001;
+      if(c.active||!settled){
+        c.rX+=(c.tRX-c.rX)*0.14;
+        c.rY+=(c.tRY-c.rY)*0.14;
+        c.mX+=(c.tMX-c.mX)*0.14;
+        c.mY+=(c.tMY-c.mY)*0.14;
+        c.sc+=(c.tSc-c.sc)*0.14;
+        c.el.style.transform=`perspective(${c.persp}px) rotateX(${c.rX}deg) rotateY(${c.rY}deg) scale(${c.sc}) translateZ(8px)`;
+        c.el.style.setProperty('--mx',c.mX+'%');
+        c.el.style.setProperty('--my',c.mY+'%');
+        anyActive=true;
+      } else if(c.el.style.willChange){
+        // Fully settled — release GPU layer
+        c.el.style.willChange='';
+        c.el.style.transform='';
       }
     }
-    function ensureLoop(){ if(!raf) raf=requestAnimationFrame(loop); }
+    tiltRaf = anyActive ? requestAnimationFrame(tiltLoop) : null;
+  }
 
-    c.addEventListener('mousemove',e=>{
-      active=true;
-      const r=c.getBoundingClientRect();
-      const x=e.clientX-r.left,y=e.clientY-r.top;
-      const cx=r.width/2,cy=r.height/2;
-      targetRX=-((y-cy)/cy)*max;
-      targetRY=((x-cx)/cx)*max;
-      targetMX=(x/r.width*100);
-      targetMY=(y/r.height*100);
-      targetScale=1.015;
-      ensureLoop();
+  function ensureTiltLoop(){
+    if(!tiltRaf) tiltRaf=requestAnimationFrame(tiltLoop);
+  }
+
+  function addTilt(sel,max=10,persp=900){
+    document.querySelectorAll(sel).forEach(el=>{
+      const c={el,persp,max,
+        rX:0,rY:0,mX:50,mY:50,sc:1,
+        tRX:0,tRY:0,tMX:50,tMY:50,tSc:1,
+        active:false};
+      tiltCards.push(c);
+      el.addEventListener('mousemove',e=>{
+        c.active=true;
+        c.el.style.willChange='transform';
+        const r=el.getBoundingClientRect();
+        const x=e.clientX-r.left,y=e.clientY-r.top;
+        c.tRX=-((y-r.height/2)/(r.height/2))*max;
+        c.tRY=((x-r.width/2)/(r.width/2))*max;
+        c.tMX=(x/r.width*100);
+        c.tMY=(y/r.height*100);
+        c.tSc=1.015;
+        ensureTiltLoop();
+      });
+      el.addEventListener('mouseleave',()=>{
+        c.active=false;
+        c.tRX=0;c.tRY=0;c.tMX=50;c.tMY=50;c.tSc=1;
+        ensureTiltLoop();
+      });
     });
-    c.addEventListener('mouseleave',()=>{
-      active=false;
-      targetRX=0;targetRY=0;targetMX=50;targetMY=50;targetScale=1;
-      ensureLoop();
-    });
-  });
+  }
+
+  addTilt('.tilt-card',9,900);
+  addTilt('.service-card',7,1000);
+  addTilt('.why-card',9,900);
+  addTilt('.value-card',7,900);
+  addTilt('.industry-chip',6,800);
+  addTilt('.goal-content',5,900);
 }
-addTilt('.tilt-card',9,900);
-addTilt('.service-card',7,1000);
-addTilt('.why-card',9,900);
-addTilt('.value-card',7,900);
-addTilt('.industry-chip',6,800);
-addTilt('.goal-content',5,900);
 
 // ════════════════════════════════════════════════
 // MAGNETIC BUTTONS — smooth lerped pull toward cursor
